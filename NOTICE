@@ -1,0 +1,21 @@
+9Router: Real-time Voice Gateway + OmniRush Provider
+====================================================
+
+This repository contains modified and added source files for 9Router.
+
+Original project:
+  9Router
+  https://github.com/decolua/9router
+  Copyright (c) 2024-2026 decolua and contributors
+  Licensed under the MIT License.
+
+Modifications and additions:
+  Copyright (c) 2026 User-me-ex
+  Licensed under the MIT License.
+
+The original copyright notice and license text are retained in the LICENSE file.
+
+This repository is not affiliated with, endorsed by, or supported by the 9Router
+project or its maintainers. The changes were produced with substantial AI
+assistance and have not been reviewed by the upstream maintainers. See the README
+for the experimental status, limitations, and security notes.

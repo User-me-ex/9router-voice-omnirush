@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Realtime Voice — Endpoint Test</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #14171c;
+    --panel-2: #1b1f26;
+    --border: #262b33;
+    --text: #e7eaee;
+    --muted: #8b94a3;
+    --brand: #f97316;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --bad: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+  .wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  input, select, textarea {
+    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font: inherit; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--brand); }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .row > * { flex: 1; }
+  .row > .fit { flex: 0 0 auto; }
+  button {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font: inherit; font-weight: 500; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--brand); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #111; }
+  button.danger { border-color: #5b2323; color: #ffb4b4; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 9px;
+    border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.live .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .pill.err .dot { background: var(--bad); }
+  .pill.warn .dot { background: var(--warn); }
+  .meters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .meter { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+  .meter span { font-size: 11px; color: var(--muted); }
+  .bar { height: 6px; border-radius: 999px; background: #0d1014; margin-top: 6px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--ok), var(--warn), var(--bad)); transition: width .08s linear; }
+  #log { height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+  .msg { padding: 8px 11px; border-radius: 10px; max-width: 88%; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: #1d2a3a; border: 1px solid #24384f; }
+  .msg.assistant { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--border); }
+  .msg.system { align-self: stretch; max-width: 100%; background: #241d10; border: 1px solid #4a3a17; color: #f4d9a5; font-size: 12px; }
+  .msg .who { display: block; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+  #events { height: 170px; overflow-y: auto; font: 11px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--muted); }
+  #events div { border-bottom: 1px solid #1c2027; padding: 2px 0; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; color: #ffb27a; }
+  .flash { color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Realtime Voice — Endpoint Test</h1>
+    <p class="sub">Plain HTML/CSS/JS client for <code>/v1/voice/:name</code>. Talk into the mic, listen to the model, send text in parallel.</p>
+  </div>
+
+  <div class="card">
+    <h2>Connection</h2>
+    <div class="row">
+      <div>
+        <label for="config">Configuration (name or id)</label>
+        <input id="config" list="configs" placeholder="my-gemini" autocomplete="off" />
+        <datalist id="configs"></datalist>
+      </div>
+      <div class="fit">
+        <button id="reload" title="Load configurations from /api/live/config">Reload list</button>
+      </div>
+      <div class="fit">
+        <button id="connect" class="primary">Connect</button>
+      </div>
+      <div class="fit">
+        <button id="disconnect" class="danger" disabled>Disconnect</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label for="token">Token (only needed from a non-loopback host)</label>
+        <input id="token" type="password" placeholder="optional on 127.0.0.1" autocomplete="off" />
+      </div>
+      <div>
+        <label for="model">Model override (optional)</label>
+        <input id="model" placeholder="leave empty to use the saved model" autocomplete="off" />
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+      <span id="status" class="pill"><span class="dot"></span><span id="statusText">idle</span></span>
+      <span id="gate" class="pill warn" hidden><span class="dot"></span>mic muted by gateway</span>
+      <span id="rank" class="pill" hidden><span class="dot"></span><span id="rankText"></span></span>
+    </div>
+    <div class="meters">
+      <div class="meter"><span>Microphone</span><div class="bar"><i id="inBar"></i></div></div>
+      <div class="meter"><span>Model audio</span><div class="bar"><i id="outBar"></i></div></div>
+    </div>
+    <p class="hint">Use headphones: playing the model through speakers while the mic is open can create an echo loop.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card" style="display:flex;flex-direction:column">
+      <h2>Conversation</h2>
+      <div id="log"></div>
+      <div class="row" style="margin-top:12px">
+        <input id="text" placeholder="Type a message instead of speaking…" autocomplete="off" disabled />
+        <button id="send" class="fit" disabled>Send</button>
+        <button id="interrupt" class="fit" disabled>Interrupt</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Events</h2>
+      <div id="events"></div>
+      <p class="hint">Raw socket frames. Binary = PCM16 audio; JSON = transcripts, status, failover notices.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    config: $("config"), configs: $("configs"), token: $("token"), model: $("model"),
+    connect: $("connect"), disconnect: $("disconnect"), reload: $("reload"),
+    status: $("status"), statusText: $("statusText"), gate: $("gate"),
+    rank: $("rank"), rankText: $("rankText"),
+    inBar: $("inBar"), outBar: $("outBar"),
+    log: $("log"), events: $("events"),
+    text: $("text"), send: $("send"), interrupt: $("interrupt"),
+  };
+
+  const IN_RATE = 16000;
+  const OUT_RATE = 24000;
+
+  let ws = null;
+  let inCtx = null, outCtx = null, micStream = null, micNode = null, analyser = null;
+  let playAt = 0;
+  const playing = new Set();
+  let gated = false;
+  let readyNow = false;
+  let micRaf = 0;
+
+  const setStatus = (text, kind) => {
+    els.statusText.textContent = text;
+    els.status.className = "pill" + (kind ? " " + kind : "");
+  };
+
+  const logMsg = (role, text) => {
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = role === "user" ? "you" : role;
+    div.appendChild(who);
+    div.appendChild(document.createTextNode(text));
+    els.log.appendChild(div);
+    els.log.scrollTop = els.log.scrollHeight;
+  };
+
+  const logEvent = (label, detail) => {
+    const div = document.createElement("div");
+    const time = new Date().toLocaleTimeString();
+    div.textContent = time + "  " + label + (detail ? "  " + detail : "");
+    els.events.appendChild(div);
+    if (els.events.childElementCount > 300) els.events.firstElementChild.remove();
+    els.events.scrollTop = els.events.scrollHeight;
+  };
+
+  async function loadConfigs() {
+    try {
+      const res = await fetch("/api/live/config", { credentials: "include" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      els.configs.innerHTML = "";
+      (data.configs || []).forEach((c) => {
+        const opt = document.createElement("option");
+        opt.value = c.name || c.id;
+        opt.label = (c.providerName || c.adapter || "") + " · " + (c.model || "");
+        els.configs.appendChild(opt);
+      });
+      if (!els.config.value && data.configs && data.configs.length) {
+        els.config.value = data.configs[0].name || data.configs[0].id;
+      }
+      if (data.wsToken) els.token.value = data.wsToken;
+      logEvent("config list loaded", (data.configs || []).length + " configuration(s)");
+      if (data.defaultId) els.config.placeholder = data.defaultId;
+    } catch (err) {
+      logEvent("config list unavailable", String(err.message || err) + " — type the name manually");
+    }
+  }
+
+  function buildUrl() {
+    const name = els.config.value.trim();
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    let url = proto + "//" + location.host + "/v1/voice/" + encodeURIComponent(name);
+    const params = [];
+    const token = els.token.value.trim();
+    const model = els.model.value.trim();
+    if (token) params.push("token=" + encodeURIComponent(token));
+    if (model) params.push("model=" + encodeURIComponent(model));
+    if (params.length) url += "?" + params.join("&");
+    return url;
+  }
+
+  const WORKLET = [
+    "class PCM extends AudioWorkletProcessor {",
+    "  process(inputs) {",
+    "    const ch = inputs[0] && inputs[0][0];",
+    "    if (!ch) return true;",
+    "    const pcm = new Int16Array(ch.length);",
+    "    for (let i = 0; i < ch.length; i++) {",
+    "      const s = Math.max(-1, Math.min(1, ch[i]));",
+    "      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;",
+    "    }",
+    "    this.port.postMessage(pcm.buffer, [pcm.buffer]);",
+    "    return true;",
+    "  }",
+    "}",
+    "registerProcessor('pcm-capture', PCM);",
+  ].join("\n");
+
+  async function startMic() {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    inCtx = new AudioContext({ sampleRate: IN_RATE });
+    const source = inCtx.createMediaStreamSource(micStream);
+
+    analyser = inCtx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    drawMeter();
+
+    const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+    await inCtx.audioWorklet.addModule(url);
+    micNode = new AudioWorkletNode(inCtx, "pcm-capture");
+    source.connect(micNode);
+    micNode.port.onmessage = (e) => {
+      if (gated) return;
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(e.data);
+    };
+  }
+
+  function drawMeter() {
+    const data = new Uint8Array(analyser.fftSize);
+    const tick = () => {
+      if (!analyser) return;
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      els.inBar.style.width = Math.min(100, rms * 220).toFixed(1) + "%";
+      micRaf = requestAnimationFrame(tick);
+    };
+    micRaf = requestAnimationFrame(tick);
+  }
+
+  function ensureOutContext() {
+    if (!outCtx) outCtx = new AudioContext({ sampleRate: OUT_RATE });
+    if (outCtx.state === "suspended") outCtx.resume();
+    return outCtx;
+  }
+
+  function playPcm(buffer) {
+    const ctx = ensureOutContext();
+    const i16 = new Int16Array(buffer);
+    if (!i16.length) return;
+
+    let peak = 0;
+    const f32 = new Float32Array(i16.length);
+    for (let i = 0; i < i16.length; i++) {
+      const v = i16[i] / 32768;
+      f32[i] = v;
+      const a = Math.abs(v);
+      if (a > peak) peak = a;
+    }
+    els.outBar.style.width = Math.min(100, peak * 140).toFixed(1) + "%";
+
+    const audioBuffer = ctx.createBuffer(1, f32.length, OUT_RATE);
+    audioBuffer.copyToChannel(f32, 0);
+
+    const src = ctx.createBufferSource();
+    src.buffer = audioBuffer;
+    src.connect(ctx.destination);
+    playAt = Math.max(playAt, ctx.currentTime + 0.02);
+    src.start(playAt);
+    playAt += audioBuffer.duration;
+    playing.add(src);
+    src.onended = () => playing.delete(src);
+  }
+
+  function stopAudio() {
+    playing.forEach((src) => { try { src.stop(); } catch {} });
+    playing.clear();
+    playAt = outCtx ? outCtx.currentTime : 0;
+    els.outBar.style.width = "0%";
+  }
+
+  function refreshInputs() {
+    const canText = !!ws && ws.readyState === WebSocket.OPEN && readyNow;
+    els.text.disabled = !canText;
+    els.send.disabled = !canText;
+  }
+
+  function setConnected(on) {
+    els.connect.disabled = on;
+    els.disconnect.disabled = !on;
+    els.interrupt.disabled = !on;
+    refreshInputs();
+  }
+
+  async function connect() {
+    if (ws) return;
+    const name = els.config.value.trim();
+    if (!name) { setStatus("configuration required", "err"); return; }
+
+    setStatus("connecting…", "warn");
+    logEvent("connecting", buildUrl().replace(/token=[^&]+/, "token=***"));
+
+    try {
+      await startMic();
+    } catch (err) {
+      // Text-only testing still works without a microphone.
+      logEvent("microphone unavailable", String(err.message || err) + " — text-only mode");
+    }
+
+    ws = new WebSocket(buildUrl());
+    ws.binaryType = "arraybuffer";
+
+    ws.onopen = () => {
+      logEvent("socket open");
+      setConnected(true);
+      els.connect.disabled = true;
+    };
+
+    ws.onmessage = (e) => {
+      if (e.data instanceof ArrayBuffer) {
+        playPcm(e.data);
+        return;
+      }
+      let msg;
+      try { msg = JSON.parse(e.data); } catch { return; }
+
+      switch (msg.type) {
+        case "ready":
+          readyNow = true;
+          refreshInputs();
+          setStatus("connected", "live");
+          els.rank.hidden = false;
+          els.rankText.textContent = "rank #" + (msg.rank || 1) + " · " + (msg.model || "");
+          logEvent("ready", (msg.adapter || "") + " " + (msg.name || ""));
+          break;
+        case "status":
+          if (msg.state === "connected") setStatus("connected", "live");
+          else if (msg.state === "connecting") setStatus("connecting…", "warn");
+          else if (msg.state === "reconnecting") setStatus("reconnecting…", "warn");
+          else if (msg.state === "disconnected") setStatus("disconnected", "err");
+          logEvent("status", msg.state + (msg.detail ? " · " + msg.detail : ""));
+          break;
+        case "text":
+          logMsg(msg.role === "system" ? "system" : msg.role, msg.text);
+          break;
+        case "turnComplete":
+          logEvent("turn complete");
+          break;
+        case "interrupted":
+          stopAudio();
+          logEvent("assistant interrupted");
+          break;
+        case "inputGate":
+          gated = !!msg.muted;
+          els.gate.hidden = !gated;
+          logEvent("input gate", gated ? "muted" : "open");
+          break;
+        case "parallel_text_sent":
+          logEvent("text accepted", String(msg.text || "").slice(0, 60));
+          break;
+        case "error":
+          setStatus(msg.code || "error", "err");
+          logMsg("system", "[" + (msg.code || "error") + "] " + (msg.message || ""));
+          logEvent("error", (msg.code || "") + " " + (msg.message || ""));
+          break;
+        default:
+          logEvent(msg.type || "event", JSON.stringify(msg).slice(0, 160));
+      }
+    };
+
+    ws.onerror = () => logEvent("socket error");
+    ws.onclose = (e) => {
+      logEvent("socket closed", e.code + (e.reason ? " " + e.reason : ""));
+      teardown();
+      setStatus("closed", e.wasClean ? "" : "err");
+    };
+  }
+
+  function teardown() {
+    if (ws) { try { ws.close(); } catch {} ws = null; }
+    readyNow = false;
+    if (micNode) { try { micNode.disconnect(); } catch {} micNode = null; }
+    if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
+    if (analyser) { try { analyser.disconnect(); } catch {} analyser = null; }
+    if (inCtx) { try { inCtx.close(); } catch {} inCtx = null; }
+    cancelAnimationFrame(micRaf);
+    els.inBar.style.width = "0%";
+    stopAudio();
+    gated = false;
+    els.gate.hidden = true;
+    els.rank.hidden = true;
+    setConnected(false);
+  }
+
+  function disconnect() {
+    if (ws) { try { ws.close(1000, "client disconnect"); } catch {} }
+    teardown();
+    setStatus("idle");
+  }
+
+  function sendText() {
+    const text = els.text.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    logMsg("user", text);
+    ws.send(JSON.stringify({ type: "text", text }));
+    els.text.value = "";
+  }
+
+  els.connect.addEventListener("click", connect);
+  els.disconnect.addEventListener("click", disconnect);
+  els.reload.addEventListener("click", loadConfigs);
+  els.send.addEventListener("click", sendText);
+  els.text.addEventListener("keydown", (e) => { if (e.key === "Enter") sendText(); });
+  els.interrupt.addEventListener("click", () => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "interrupt" }));
+    stopAudio();
+  });
+  window.addEventListener("beforeunload", () => { try { ws && ws.close(); } catch {} });
+
+  loadConfigs();
+})();
+</script>
+</body>
+</html>

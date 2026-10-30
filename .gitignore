@@ -1,0 +1,30 @@
+# Dependencies and build output
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Runtime data and secrets
+.env
+.env.*
+!.env.example
+data/
+*.sqlite
+*.sqlite-*
+*.db
+live-ws-token
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs and local files
+*.log
+logs/
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
