@@ -154,21 +154,139 @@ Server to client:
 
 ### Browser capture and playback
 
-The Voice Lab implements the browser side: an `AudioWorklet` captures mono audio,
-converts float samples to `Int16Array`, and sends the buffer as a binary frame. Incoming
-binary frames are converted back to float samples and scheduled on an `AudioContext` for
-gap-free playback. See `voice-lab/index.html` and `docs/NOTES.md` for the full code.
+The Voice Lab implements the client side: an `AudioWorklet` captures mono audio from the
+user's microphone, converts floating-point samples to 16-bit integer PCM (`Int16Array`),
+and streams raw binary frames to the server. Incoming binary frames from the assistant
+are converted back to float samples and scheduled on an `AudioContext` for seamless,
+gap-free playback.
 
-## Voice Lab
+### Direct WebSocket Code Example
 
-The standalone test page does not require the dashboard.
+Below is a complete, minimal JavaScript example demonstrating direct communication with
+the real-time voice gateway:
+
+```javascript
+// Connect to the real-time voice endpoint (append ?token=... for non-loopback connections)
+const ws = new WebSocket("ws://127.0.0.1:20128/v1/voice/live-gemini");
+ws.binaryType = "arraybuffer";
+
+// 1. Audio Output Context (24 kHz for assistant playback)
+const outCtx = new AudioContext({ sampleRate: 24000 });
+let playAt = outCtx.currentTime;
+
+ws.onopen = () => {
+  console.log("WebSocket connected. Waiting for 'ready' frame...");
+};
+
+ws.onmessage = (event) => {
+  // Binary frame = raw PCM16 audio from the assistant
+  if (event.data instanceof ArrayBuffer) {
+    const pcm16 = new Int16Array(event.data);
+    const float32 = Float32Array.from(pcm16, (v) => v / 32768);
+    const audioBuffer = outCtx.createBuffer(1, float32.length, 24000);
+    audioBuffer.copyToChannel(float32, 0);
+
+    const source = outCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(outCtx.destination);
+
+    playAt = Math.max(playAt, outCtx.currentTime + 0.03);
+    source.start(playAt);
+    playAt += audioBuffer.duration;
+    return;
+  }
+
+  // JSON frame = status, transcripts, turn completions, or errors
+  const msg = JSON.parse(event.data);
+  switch (msg.type) {
+    case "ready":
+      console.log(`Live gateway ready (model: ${msg.model}, adapter: ${msg.adapter})`);
+      // Optional: send an initial text prompt during the live session
+      ws.send(JSON.stringify({ type: "text", text: "Say hello and introduce yourself briefly." }));
+      break;
+    case "text":
+      console.log(`[${msg.role}]: ${msg.text}`);
+      break;
+    case "turnComplete":
+      console.log("Assistant turn complete.");
+      break;
+    case "interrupted":
+      console.log("Assistant speech was interrupted.");
+      break;
+    case "error":
+      console.error("Live error:", msg.message);
+      break;
+  }
+};
+
+// 2. Microphone Input via AudioWorklet (16 kHz mono PCM16)
+async function startMicrophone() {
+  const inCtx = new AudioContext({ sampleRate: 16000 });
+  const workletCode = `class PCMProcessor extends AudioWorkletProcessor {
+    process(inputs) {
+      const channel = inputs[0] && inputs[0][0];
+      if (!channel) return true;
+      const pcm16 = new Int16Array(channel.length);
+      for (let i = 0; i < channel.length; i++) {
+        pcm16[i] = Math.max(-1, Math.min(1, channel[i])) * 32767;
+      }
+      this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
+      return true;
+    }
+  }
+  registerProcessor("pcm-processor", PCMProcessor);`;
+
+  await inCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletCode], { type: "text/javascript" })));
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, sampleRate: 16000 } });
+  const source = inCtx.createMediaStreamSource(stream);
+  const pcmNode = new AudioWorkletNode(inCtx, "pcm-processor");
+
+  pcmNode.port.onmessage = (e) => {
+    // Stream raw PCM16 chunks directly over WebSocket
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(e.data);
+    }
+  };
+
+  source.connect(pcmNode);
+  console.log("Microphone streaming active.");
+}
+
+// 3. User barge-in / interruption
+function interrupt() {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "interrupt" }));
+  }
+}
+```
+
+## Voice Lab (Interactive HTML/CSS/JS Test Harness)
+
+The repository includes a dedicated, standalone browser test page in `voice-lab/index.html`
+with its accompanying helper in `voice-lab/server.mjs`.
+
+### Why use the Voice Lab?
+- **No full dashboard build needed:** Test voice capabilities immediately without running
+  Next.js webpack builds or logging into the dashboard.
+- **Three-in-one testing:** Includes interactive tabs for **Text-to-Speech (TTS)**,
+  **Speech-to-Text (STT)**, and **Live Duplex Voice Session**.
+- **Real-time Diagnostics:** Visual indicator for WebSocket connection status, live audio
+  waveform visualizer, event logging panel, and direct text injection while live.
+- **Inspectable Source:** Clean, vanilla HTML/CSS and JavaScript with no external framework
+  dependencies—ideal for learning how the duplex AudioWorklet and PCM streams are wired.
+
+### How to run the Voice Lab
 
 ```bash
+# 1. Start your 9Router instance (e.g. on port 20128)
+node custom-server.js --port 20128
+
+# 2. In another terminal, start the Voice Lab helper
 node voice-lab/server.mjs
 # open http://127.0.0.1:8788/
 ```
 
-Environment variables:
+Environment variables for `voice-lab/server.mjs`:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -176,9 +294,10 @@ Environment variables:
 | `VOICE_LAB_PORT` | `8788` | Local lab port (bound to 127.0.0.1) |
 | `DATA_DIR` | `%APPDATA%\9router` (Windows) | 9Router data directory |
 
-The helper reads the local 9Router SQLite database in read-only mode to list live
-configurations and read the WS token. It also proxies `/v1/*` requests to 9Router for the
-TTS/STT tabs. Do not expose the helper to a network; it binds to loopback by default.
+The helper reads the local 9Router SQLite database in read-only mode to discover configured
+live adapters and the token (`live-ws-token`). It also proxies standard `/v1/*` audio
+requests to 9Router. You can also open `voice-lab/index.html` directly as a static file in
+any modern browser and enter your 9Router gateway URL and token manually.
 
 ## OmniRush provider
 
