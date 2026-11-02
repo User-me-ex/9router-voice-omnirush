@@ -16,9 +16,24 @@ test lab, and an OmniRush device-code OAuth provider.
 
 Base version: **9Router v0.5.112** (upstream commit `1fe586b`).
 
-## Quick start (clone and run)
+## Quick start
 
 Requirements: Node.js 20.9+ and `git` on `PATH`.
+
+### Install once, then just run `9rtmod`
+
+```bash
+npm i -g github:User-me-ex/9router-voice-omnirush
+9rtmod
+```
+
+After that, `9rtmod` works from any terminal and any directory. Working files
+(upstream checkout, logs, build) live in `~/.9rtmod` (`.9rtmod` when you run from
+a clone instead), not in your global npm folder.
+
+If the package is published to npm later, the same works as `npm i -g 9rtmod`.
+
+### Or run from a clone
 
 ```bash
 git clone https://github.com/User-me-ex/9router-voice-omnirush.git

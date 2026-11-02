@@ -12,14 +12,18 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import net from "node:net";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const REPO = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const WORK = path.join(REPO, ".9rtmod");
+// Global npm installs land under node_modules; keep working files in the user home
+// instead of writing inside the npm prefix.
+const INSTALLED = REPO.split(path.sep).includes("node_modules");
+const WORK = INSTALLED ? path.join(os.homedir(), ".9rtmod") : path.join(REPO, ".9rtmod");
 const APP_DIR = path.join(WORK, "app");
-const LOGS = path.join(REPO, "logs");
+const LOGS = path.join(WORK, "logs");
 const STATE = path.join(WORK, "state.json");
 
 const UPSTREAM = "https://github.com/decolua/9router.git";
@@ -89,10 +93,12 @@ function repoCommit() {
 }
 
 function hasFullTree() {
-  return (
-    fs.existsSync(path.join(REPO, "package.json")) &&
-    fs.existsSync(path.join(REPO, "custom-server.js"))
-  );
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
+    return pkg.name === "9router-app" && fs.existsSync(path.join(REPO, "custom-server.js"));
+  } catch {
+    return false;
+  }
 }
 
 function appDir() {
@@ -416,7 +422,9 @@ async function main() {
   if (command === "update") {
     const target = toTag || latestTag();
     log(`Updating modified build to upstream ${target} (changes are kept)...`);
-    if (!hasFullTree()) spawnSync("git", ["-C", REPO, "pull", "--ff-only"], { stdio: "inherit" });
+    if (!hasFullTree() && fs.existsSync(path.join(REPO, ".git"))) {
+      spawnSync("git", ["-C", REPO, "pull", "--ff-only"], { stdio: "inherit" });
+    }
     const state = readState();
     if (alive(state.pid)) stop();
     const app = prepare(true, target);

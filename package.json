@@ -1,0 +1,48 @@
+{
+  "name": "9rtmod",
+  "version": "0.5.112",
+  "description": "One-command launcher for a 9Router build with real-time voice gateway and OmniRush provider",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "9rtmod": "tools/9rtmod.mjs"
+  },
+  "files": [
+    "tools/9rtmod.mjs",
+    "9rtmod",
+    "9rtmod.cmd",
+    "custom-server.js",
+    "live-gateway.js",
+    "voice-gateway.js",
+    "omni-overload-hook.cjs",
+    "Dockerfile",
+    "next.config.mjs",
+    "open-sse",
+    "public",
+    "src",
+    "patch",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "SECURITY.md"
+  ],
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "start": "node tools/9rtmod.mjs start"
+  },
+  "keywords": [
+    "9router",
+    "voice",
+    "websocket",
+    "gemini-live",
+    "openai-realtime",
+    "omnirush"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/User-me-ex/9router-voice-omnirush.git"
+  }
+}
