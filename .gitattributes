@@ -5,3 +5,6 @@
 *.jpeg binary
 *.gif binary
 *.webp binary
+9rtmod text eol=lf
+9rtmod.cmd text eol=crlf
+tools/*.mjs text eol=lf

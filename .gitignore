@@ -28,3 +28,7 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# 9rtmod working directories
+.9rtmod/
+logs/

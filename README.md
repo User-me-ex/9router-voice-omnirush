@@ -16,6 +16,53 @@ test lab, and an OmniRush device-code OAuth provider.
 
 Base version: **9Router v0.5.109** (upstream commit `f39d8f07`).
 
+## Quick start (clone and run)
+
+Requirements: Node.js 20.9+ and `git` on `PATH`.
+
+```bash
+git clone https://github.com/User-me-ex/9router-voice-omnirush.git
+cd 9router-voice-omnirush
+
+# Windows (cmd or PowerShell)
+.\9rtmod
+
+# macOS / Linux
+./9rtmod
+```
+
+The first run is unattended and takes a few minutes: it clones upstream 9Router
+`v0.5.109` into `.9rtmod/app` (gitignored), overlays the changed files from this
+repository, installs dependencies, and produces a production build. Then it starts
+the server on port `20128`:
+
+- Dashboard: `http://localhost:20128/dashboard/live`
+- Voice WebSocket: `ws://127.0.0.1:20128/v1/voice/<live-config>`
+
+Later runs skip the download and build unless something changed.
+
+```
+9rtmod start      # default: install/build if needed, then run
+9rtmod stop       # stop the server
+9rtmod restart    # stop, then start
+9rtmod status     # build and process state
+9rtmod logs       # last server log
+9rtmod build      # force rebuild, then restart
+9rtmod update     # git pull this repo, re-apply changes, rebuild
+9rtmod doctor     # check node, git, deps, native sqlite
+9rtmod --port 3000
+```
+
+Notes:
+
+- Builds run with a repo-local home directory (`.9rtmod/build-home`) because
+  Next.js 16 build tracing on Windows can fail on protected `AppData` folders.
+- Data, provider credentials, and the live WebSocket token stay in the normal
+  9Router data directory (`%APPDATA%\9router` on Windows); nothing is stored in
+  this repository.
+- You still need to add provider connections in the dashboard before voice or
+  OmniRush requests work.
+
 ## Highlights
 
 - **Real-time voice WebSocket gateway** at `/v1/voice/<config>` (plus `/live` and
