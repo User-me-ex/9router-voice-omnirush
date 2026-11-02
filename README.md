@@ -14,7 +14,7 @@ A source-level change set for [9Router](https://github.com/decolua/9router) that
 duplex real-time voice gateway, a dashboard for live configurations, a standalone browser
 test lab, and an OmniRush device-code OAuth provider.
 
-Base version: **9Router v0.5.109** (upstream commit `f39d8f07`).
+Base version: **9Router v0.5.112** (upstream commit `1fe586b`).
 
 ## Quick start (clone and run)
 
@@ -32,7 +32,7 @@ cd 9router-voice-omnirush
 ```
 
 The first run is unattended and takes a few minutes: it clones upstream 9Router
-`v0.5.109` into `.9rtmod/app` (gitignored), overlays the changed files from this
+`v0.5.112` into `.9rtmod/app` (gitignored), overlays the changed files from this
 repository, installs dependencies, and produces a production build. Then it starts
 the server on port `20128`:
 
@@ -62,6 +62,25 @@ Notes:
   this repository.
 - You still need to add provider connections in the dashboard before voice or
   OmniRush requests work.
+
+## Keeping up to date
+
+`npm i -g 9router@latest --prefer-online` updates the **stock** CLI only. This
+modified build lives in its own checkout (`.9rtmod/app`), so that command cannot
+overwrite or remove these changes, and it does not upgrade this build either.
+
+To move the modified build to a newer upstream release while keeping every local
+change:
+
+```bash
+./9rtmod update            # newest upstream release
+./9rtmod update --to v0.5.112
+```
+
+The updater re-clones the requested upstream tag, re-applies the local change set,
+reinstalls dependencies if needed, rebuilds, and restarts. If upstream has edited
+one of the same files, it tries a 3-way merge first and only falls back to
+overwriting the changed files (with a warning) when the merge conflicts.
 
 ## Highlights
 
@@ -97,13 +116,13 @@ src/lib/oauth/providers/         OmniRush OAuth provider
 src/shared/components/           Sidebar/header/OAuth modal integration
 public/realtime-voice-test.html  Test page shipped with the app
 patch/9router-voice-omnirush.patch
-                                 Complete 32-file patch against f39d8f07
+                                 Complete 32-file patch against 1fe586b
 voice-lab/                       Standalone test page and local helper server
 docs/NOTES.md                    Architecture, protocol, verification, known issues
 ```
 
 The files above are only the changed or added files. This repository is **not** a
-complete 9Router distribution. Apply it to a clean v0.5.109 checkout.
+complete 9Router distribution. Apply it to a clean v0.5.112 checkout.
 
 Build artifacts (`node_modules/`, `.next/`) are intentionally not committed; a compiled
 runtime is roughly 1 GB. Build from source with the steps below.
@@ -114,7 +133,7 @@ runtime is roughly 1 GB. Build from source with the steps below.
 - Node.js with `node:sqlite` support for the Voice Lab helper (Node 22.5+ with the
   experimental flag, or Node 24+).
 - npm.
-- A clean 9Router checkout at v0.5.109 (`f39d8f07`).
+- A clean 9Router checkout at v0.5.112 (`1fe586b`).
 - Provider credentials supported by 9Router for the adapter you want to test.
 
 ## Installation
@@ -124,14 +143,14 @@ runtime is roughly 1 GB. Build from source with the steps below.
 ```bash
 git clone https://github.com/decolua/9router.git
 cd 9router
-git checkout f39d8f07
+git checkout 1fe586b
 git apply --binary /path/to/9router-voice-omnirush/patch/9router-voice-omnirush.patch
 ```
 
 ### Option B: copy the changed files
 
 Copy every path in this repository (except `patch/`, `docs/`, `voice-lab/`, `README.md`,
-`LICENSE`, and `NOTICE`) over the same path in the v0.5.109 checkout.
+`LICENSE`, and `NOTICE`) over the same path in the v0.5.112 checkout.
 
 ## Build and run
 

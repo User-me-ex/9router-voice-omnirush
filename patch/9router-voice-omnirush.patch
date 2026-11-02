@@ -1,5 +1,5 @@
 diff --git a/Dockerfile b/Dockerfile
-index 83d4f467..a591006b 100644
+index 24641323..68e04df8 100644
 --- a/Dockerfile
 +++ b/Dockerfile
 @@ -31,6 +31,8 @@ RUN --mount=type=cache,target=/root/.npm \
@@ -10,8 +10,8 @@ index 83d4f467..a591006b 100644
 +ENV NODE_OPTIONS=--max-old-space-size=4096
  RUN npm run build
  
- FROM ${NODE_IMAGE} AS runner
-@@ -55,6 +57,9 @@ COPY --from=builder /app/public ./public
+ # https://github.com/decolua/9router/issues/5245
+@@ -73,6 +75,9 @@ COPY --from=builder /app/public ./public
  COPY --from=builder /app/.next/static ./.next/static
  COPY --from=builder /app/.next/standalone ./
  COPY --from=builder /app/custom-server.js ./custom-server.js
@@ -21,21 +21,21 @@ index 83d4f467..a591006b 100644
  COPY --from=builder /app/open-sse ./open-sse
  # Next file tracing can omit sibling files; MITM runs server.js as a separate process.
  COPY --from=builder /app/src/mitm ./src/mitm
-@@ -67,6 +72,8 @@ COPY --from=builder /app/node_modules/next ./node_modules/next
+@@ -85,6 +90,8 @@ COPY --from=builder /app/node_modules/next ./node_modules/next
  COPY --from=builder /app/node_modules/sql.js ./node_modules/sql.js
  # node-machine-id is createRequire-loaded at runtime; tracing omits it.
  COPY --from=builder /app/node_modules/node-machine-id ./node_modules/node-machine-id
 +# ws is required by live-gateway.js; externalized in next.config so tracing omits it.
 +COPY --from=builder /app/node_modules/ws ./node_modules/ws
- 
- RUN mkdir -p /app/data && chown -R node:node /app && \
-   mkdir -p /app/data-home && chown node:node /app/data-home && \
+ # wreq-js + playwright-core (and deps) are lazy-loaded at runtime and omitted by
+ # tracing. See https://github.com/decolua/9router/issues/5245
+ COPY --from=builder /opt/lazy-runtime/node_modules/. ./node_modules/
 diff --git a/custom-server.js b/custom-server.js
 index ba092136..396a4010 100644
 --- a/custom-server.js
 +++ b/custom-server.js
 @@ -1,3 +1,4 @@
-+???require("./omni-overload-hook.cjs");
++﻿require("./omni-overload-hook.cjs");
  const http = require("http");
  const path = require("path");
  const fs = require("fs");
@@ -52,8 +52,8 @@ index ba092136..396a4010 100644
    if (backgroundRefreshStarted) return;
    backgroundRefreshStarted = true;
    // Prefer source path (repo / standalone that still has src). Fail-open if missing
--  // ??? initializeApp also starts the same scheduler when the Next app boots.
-+  // ???????? initializeApp also starts the same scheduler when the Next app boots.
+-  // — initializeApp also starts the same scheduler when the Next app boots.
++  // â€” initializeApp also starts the same scheduler when the Next app boots.
    const modPath = path.join(__dirname, "src", "sse", "services", "backgroundTokenRefresh.js");
    import(pathToFileURL(modPath).href)
      .then((m) => {
@@ -529,11 +529,11 @@ index 00000000..28a4cbda
 +
 +function formatFailoverReport(errorLog, candidates) {
 +  const lines = [
-+    "???? Realtime Voice Failover Alert: All APIs Stopped Working",
-+    "???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????",
++    "🚨 Realtime Voice Failover Alert: All APIs Stopped Working",
++    "═════════════════════════════════════════════════════════════════",
 +    `Attempted ${candidates.length} ranked API endpoint(s) across 2 full passes (cycled back to Rank #1 and retested). None was able to establish or maintain an active live session.`,
 +    "",
-+    "???? Detailed Problem Diagnostics by Endpoint:",
++    "📋 Detailed Problem Diagnostics by Endpoint:",
 +  ];
 +
 +  for (let i = 0; i < errorLog.length; i++) {
@@ -541,21 +541,21 @@ index 00000000..28a4cbda
 +    lines.push(
 +      `-----------------------------------------------------------------`,
 +      `[Attempt #${i + 1}] Rank #${item.rank}: ${item.name}`,
-+      `  ??? Status/Code:  ${item.code}`,
-+      `  ??? Error Reason: ${item.error}`,
-+      `  ??? Model ID:     ${item.model || "default"}`,
-+      `  ??? Protocol:     ${item.adapter}`,
-+      `  ??? Base URL:     ${item.baseUrl}`,
-+      `  ??? Endpoint URL: ${item.endpoint}`,
-+      `  ??? Credential:   ${item.credential}`,
-+      `  ??? Timestamp:    ${item.time}`
++      `  • Status/Code:  ${item.code}`,
++      `  • Error Reason: ${item.error}`,
++      `  • Model ID:     ${item.model || "default"}`,
++      `  • Protocol:     ${item.adapter}`,
++      `  • Base URL:     ${item.baseUrl}`,
++      `  • Endpoint URL: ${item.endpoint}`,
++      `  • Credential:   ${item.credential}`,
++      `  • Timestamp:    ${item.time}`
 +    );
 +  }
 +
 +  lines.push(
 +    `-----------------------------------------------------------------`,
 +    "",
-+    "??????? Recommended Actions:",
++    "🛠️ Recommended Actions:",
 +    "1. Check credentials & API keys under Providers tab.",
 +    "2. Check model names and WebSocket URLs under Model & Endpoint.",
 +    "3. Reorder your API ranking or test individual endpoints using 'Test WebSocket'."
@@ -704,7 +704,7 @@ index 00000000..28a4cbda
 +        sendJson(client, {
 +          type: "text",
 +          role: "system",
-+          text: `???? [Failover Cycle] All ${candidates.length} ranked API(s) failed on first pass. Cycling back to Rank #1 for one retry pass...`,
++          text: `🔄 [Failover Cycle] All ${candidates.length} ranked API(s) failed on first pass. Cycling back to Rank #1 for one retry pass...`,
 +        });
 +        return connectCandidate(0, 1);
 +      }
@@ -736,7 +736,7 @@ index 00000000..28a4cbda
 +      sendJson(client, {
 +        type: "text",
 +        role: "system",
-+        text: `?????? [Failover] Rank #${currentRank} (${candidate.name} ?? ${candidate.model}) skipped: ${reason}. Trying next API in ranking...`,
++        text: `⚠️ [Failover] Rank #${currentRank} (${candidate.name} · ${candidate.model}) skipped: ${reason}. Trying next API in ranking...`,
 +      });
 +      return connectCandidate(idx + 1, currentCycle);
 +    }
@@ -746,7 +746,7 @@ index 00000000..28a4cbda
 +      sendJson(client, {
 +        type: "text",
 +        role: "system",
-+        text: `?????? [Failover] Rank #${currentRank} (${candidate.name} ?? ${candidate.model}) skipped: ${reason}. Trying next API in ranking...`,
++        text: `⚠️ [Failover] Rank #${currentRank} (${candidate.name} · ${candidate.model}) skipped: ${reason}. Trying next API in ranking...`,
 +      });
 +      return connectCandidate(idx + 1, currentCycle);
 +    }
@@ -786,7 +786,7 @@ index 00000000..28a4cbda
 +      sendJson(client, {
 +        type: "text",
 +        role: "system",
-+        text: `?????? [Failover] Rank #${currentRank} (${candidate.name} ?? ${candidate.model}) connection error: ${String(err?.message || err)}. Trying next API in ranking...`,
++        text: `⚠️ [Failover] Rank #${currentRank} (${candidate.name} · ${candidate.model}) connection error: ${String(err?.message || err)}. Trying next API in ranking...`,
 +      });
 +      return connectCandidate(idx + 1, currentCycle);
 +    }
@@ -805,7 +805,7 @@ index 00000000..28a4cbda
 +      sendJson(client, {
 +        type: "text",
 +        role: "system",
-+        text: `?????? [Failover] Rank #${currentRank} (${candidate.name} ?? ${candidate.model}) setup timed out. Failing over to next ranked API...`,
++        text: `⚠️ [Failover] Rank #${currentRank} (${candidate.name} · ${candidate.model}) setup timed out. Failing over to next ranked API...`,
 +      });
 +      connectCandidate(idx + 1, currentCycle);
 +    }, 25000);
@@ -822,7 +822,7 @@ index 00000000..28a4cbda
 +      sendJson(client, {
 +        type: "text",
 +        role: "system",
-+        text: `?????? [Failover] Rank #${currentRank} (${candidate.name} ?? ${candidate.model}) failed (${code}): ${reason}. Failing over to next ranked API...`,
++        text: `⚠️ [Failover] Rank #${currentRank} (${candidate.name} · ${candidate.model}) failed (${code}): ${reason}. Failing over to next ranked API...`,
 +      });
 +      connectCandidate(idx + 1, currentCycle);
 +    };
@@ -871,7 +871,7 @@ index 00000000..28a4cbda
 +            sendJson(client, {
 +              type: "text",
 +              role: "system",
-+              text: `??? [Failover Succeeded] Switched to Rank #${currentRank}: ${candidate.name} (${candidate.model}) via ${candidate.adapter}.`,
++              text: `✅ [Failover Succeeded] Switched to Rank #${currentRank}: ${candidate.name} (${candidate.model}) via ${candidate.adapter}.`,
 +            });
 +          }
 +          flushPendingText(client, upstream, true);
@@ -944,7 +944,7 @@ index 00000000..28a4cbda
 +          sendJson(client, {
 +            type: "text",
 +            role: "system",
-+            text: `??? [Failover Succeeded] Switched to Rank #${currentRank}: ${candidate.name} (${candidate.model}) via ${candidate.adapter}.`,
++            text: `✅ [Failover Succeeded] Switched to Rank #${currentRank}: ${candidate.name} (${candidate.model}) via ${candidate.adapter}.`,
 +          });
 +        }
 +        flushPendingText(client, upstream, false);
@@ -1019,7 +1019,7 @@ index 00000000..28a4cbda
 +          sendJson(client, {
 +            type: "text",
 +            role: "system",
-+            text: `?????? Live connection on Rank #${currentRank} (${candidate.name}) disconnected (${code}: ${detail || "closed"}). Failing over to next ranked API...`,
++            text: `⚠️ Live connection on Rank #${currentRank} (${candidate.name}) disconnected (${code}: ${detail || "closed"}). Failing over to next ranked API...`,
 +          });
 +          connectCandidate((idx + 1) % candidates.length, 0);
 +        } else {
@@ -1159,7 +1159,7 @@ index dd276e63..d656e853 100644
 @@ -25,7 +26,7 @@ const nextConfig = {
    // plugins by dynamic require, neither of which survives bundling.
    // wreq-js resolves its rust native binding by relative require paths from its own
-   // package dir ??? bundling breaks those paths ("Failed to load native module").
+   // package dir — bundling breaks those paths ("Failed to load native module").
 -  serverExternalPackages: ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open", "@aws-sdk/credential-providers", "wreq-js"],
 +  serverExternalPackages: ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite", "open", "@aws-sdk/credential-providers", "wreq-js", "ws"],
    turbopack: {
@@ -1180,7 +1180,7 @@ index 00000000..dbb0c3e8
 --- /dev/null
 +++ b/omni-overload-hook.cjs
 @@ -0,0 +1,663 @@
-+???"use strict";
++﻿"use strict";
 +
 +/**
 + * OmniRush overload auto-retry for 9router.
@@ -1890,7 +1890,7 @@ index 00000000..6cf898c2
 --- /dev/null
 +++ b/open-sse/executors/omnirush.js
 @@ -0,0 +1,29 @@
-+???import { DefaultExecutor } from "./default.js";
++﻿import { DefaultExecutor } from "./default.js";
 +
 +/**
 + * OmniRush speaks the OpenAI Responses API but requires stream=true, store=false,
@@ -1920,10 +1920,10 @@ index 00000000..6cf898c2
 +  }
 +}
 diff --git a/open-sse/providers/capabilities.js b/open-sse/providers/capabilities.js
-index cd78ec70..361348d8 100644
+index af27afee..d77bac68 100644
 --- a/open-sse/providers/capabilities.js
 +++ b/open-sse/providers/capabilities.js
-@@ -229,6 +229,13 @@ const CODEX_EXTENDED_CAPS = { ...CODEX_GPT_56_DEFAULT_CAPS, contextWindow: 87200
+@@ -234,6 +234,13 @@ const CODEX_EXTENDED_CAPS = { ...CODEX_GPT_56_DEFAULT_CAPS, contextWindow: 87200
  // the generic pattern rather than merging with it.
  const DEVIN_CLI_GPT_CAPS = { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 200000, maxOutput: 128000 };
  
@@ -1937,7 +1937,7 @@ index cd78ec70..361348d8 100644
  /**
   * Provider-specific capability overrides. Keyed by provider alias/id.
   */
-@@ -438,6 +445,9 @@ PROVIDER_CAPABILITIES["qoder"] = {
+@@ -458,6 +465,9 @@ PROVIDER_CAPABILITIES["qoder"] = {
    "cmodel":       { vision: true, reasoning: true, contextWindow: 180000, maxOutput: 65536 },
  };
  
@@ -1948,7 +1948,7 @@ index cd78ec70..361348d8 100644
  // the intl Qoder capability table verbatim (vision/reasoning/contextWindow).
  PROVIDER_CAPABILITIES["qoder-cn"] = PROVIDER_CAPABILITIES["qoder"];
 diff --git a/open-sse/providers/registry/index.js b/open-sse/providers/registry/index.js
-index 409fd2cf..713e4ffe 100644
+index 41dc6605..fbc1fd16 100644
 --- a/open-sse/providers/registry/index.js
 +++ b/open-sse/providers/registry/index.js
 @@ -129,6 +129,7 @@ import p122 from "./xquik.js";
@@ -1959,7 +1959,7 @@ index 409fd2cf..713e4ffe 100644
  import p129 from "./agnes.js";
  import p130 from "./bai.js";
  import p131 from "./tinyfish.js";
-@@ -274,6 +275,7 @@ export default [
+@@ -276,6 +277,7 @@ export default [
    p125,
    p126,
    p127,
@@ -2202,7 +2202,7 @@ index 00000000..a12b5308
 +<head>
 +<meta charset="utf-8" />
 +<meta name="viewport" content="width=device-width, initial-scale=1" />
-+<title>Realtime Voice ??? Endpoint Test</title>
++<title>Realtime Voice — Endpoint Test</title>
 +<style>
 +  :root {
 +    --bg: #0b0d10;
@@ -2277,7 +2277,7 @@ index 00000000..a12b5308
 +<body>
 +<div class="wrap">
 +  <div>
-+    <h1>Realtime Voice ??? Endpoint Test</h1>
++    <h1>Realtime Voice — Endpoint Test</h1>
 +    <p class="sub">Plain HTML/CSS/JS client for <code>/v1/voice/:name</code>. Talk into the mic, listen to the model, send text in parallel.</p>
 +  </div>
 +
@@ -2326,7 +2326,7 @@ index 00000000..a12b5308
 +      <h2>Conversation</h2>
 +      <div id="log"></div>
 +      <div class="row" style="margin-top:12px">
-+        <input id="text" placeholder="Type a message instead of speaking???" autocomplete="off" disabled />
++        <input id="text" placeholder="Type a message instead of speaking…" autocomplete="off" disabled />
 +        <button id="send" class="fit" disabled>Send</button>
 +        <button id="interrupt" class="fit" disabled>Interrupt</button>
 +      </div>
@@ -2399,7 +2399,7 @@ index 00000000..a12b5308
 +      (data.configs || []).forEach((c) => {
 +        const opt = document.createElement("option");
 +        opt.value = c.name || c.id;
-+        opt.label = (c.providerName || c.adapter || "") + " ?? " + (c.model || "");
++        opt.label = (c.providerName || c.adapter || "") + " · " + (c.model || "");
 +        els.configs.appendChild(opt);
 +      });
 +      if (!els.config.value && data.configs && data.configs.length) {
@@ -2409,7 +2409,7 @@ index 00000000..a12b5308
 +      logEvent("config list loaded", (data.configs || []).length + " configuration(s)");
 +      if (data.defaultId) els.config.placeholder = data.defaultId;
 +    } catch (err) {
-+      logEvent("config list unavailable", String(err.message || err) + " ??? type the name manually");
++      logEvent("config list unavailable", String(err.message || err) + " — type the name manually");
 +    }
 +  }
 +
@@ -2541,14 +2541,14 @@ index 00000000..a12b5308
 +    const name = els.config.value.trim();
 +    if (!name) { setStatus("configuration required", "err"); return; }
 +
-+    setStatus("connecting???", "warn");
++    setStatus("connecting…", "warn");
 +    logEvent("connecting", buildUrl().replace(/token=[^&]+/, "token=***"));
 +
 +    try {
 +      await startMic();
 +    } catch (err) {
 +      // Text-only testing still works without a microphone.
-+      logEvent("microphone unavailable", String(err.message || err) + " ??? text-only mode");
++      logEvent("microphone unavailable", String(err.message || err) + " — text-only mode");
 +    }
 +
 +    ws = new WebSocket(buildUrl());
@@ -2574,15 +2574,15 @@ index 00000000..a12b5308
 +          refreshInputs();
 +          setStatus("connected", "live");
 +          els.rank.hidden = false;
-+          els.rankText.textContent = "rank #" + (msg.rank || 1) + " ?? " + (msg.model || "");
++          els.rankText.textContent = "rank #" + (msg.rank || 1) + " · " + (msg.model || "");
 +          logEvent("ready", (msg.adapter || "") + " " + (msg.name || ""));
 +          break;
 +        case "status":
 +          if (msg.state === "connected") setStatus("connected", "live");
-+          else if (msg.state === "connecting") setStatus("connecting???", "warn");
-+          else if (msg.state === "reconnecting") setStatus("reconnecting???", "warn");
++          else if (msg.state === "connecting") setStatus("connecting…", "warn");
++          else if (msg.state === "reconnecting") setStatus("reconnecting…", "warn");
 +          else if (msg.state === "disconnected") setStatus("disconnected", "err");
-+          logEvent("status", msg.state + (msg.detail ? " ?? " + msg.detail : ""));
++          logEvent("status", msg.state + (msg.detail ? " · " + msg.detail : ""));
 +          break;
 +        case "text":
 +          logMsg(msg.role === "system" ? "system" : msg.role, msg.text);
@@ -2709,8 +2709,8 @@ index 00000000..c33f6f12
 +    use: "Stream microphone audio",
 +  },
 +  { frame: '{"type":"text","text":"..."}', payload: "Up to 8000 chars", use: "Send a text prompt while audio is live" },
-+  { frame: '{"type":"interrupt"}', payload: "???", use: "Barge-in: stop the assistant's current answer" },
-+  { frame: '{"type":"ping"}', payload: "???", use: "Keep-alive (server replies pong)" },
++  { frame: '{"type":"interrupt"}', payload: "—", use: "Barge-in: stop the assistant's current answer" },
++  { frame: '{"type":"ping"}', payload: "—", use: "Keep-alive (server replies pong)" },
 +];
 +
 +const SERVER_EVENTS = [
@@ -2718,8 +2718,8 @@ index 00000000..c33f6f12
 +  { frame: '{"type":"ready","model":"...","adapter":"...","rank":1}', payload: "Session accepted upstream", use: "Know which ranked API serves you" },
 +  { frame: '{"type":"status","state":"connecting|connected|reconnecting|disconnected"}', payload: "detail", use: "Connection + failover progress" },
 +  { frame: '{"type":"text","role":"user|assistant|system","text":"..."}', payload: "modality on voice turns", use: "Transcripts, failover notices" },
-+  { frame: '{"type":"turnComplete"}', payload: "???", use: "Assistant finished speaking" },
-+  { frame: '{"type":"interrupted"}', payload: "???", use: "Assistant was cut off" },
++  { frame: '{"type":"turnComplete"}', payload: "—", use: "Assistant finished speaking" },
++  { frame: '{"type":"interrupted"}', payload: "—", use: "Assistant was cut off" },
 +  { frame: '{"type":"inputGate","muted":true}', payload: "Only when barge-in is disabled", use: "Tell the client to mute the mic" },
 +  { frame: '{"type":"error","code":"...","message":"..."}', payload: "unauthorized | config_missing | all_fallbacks_failed", use: "Fatal session errors" },
 +];
@@ -2883,7 +2883,7 @@ index 00000000..c33f6f12
 +            <table className="w-full text-xs text-left">
 +              <thead className="text-text-muted">
 +                <tr>
-+                  <th className="py-1.5 pr-4 font-medium">Client ??? server</th>
++                  <th className="py-1.5 pr-4 font-medium">Client → server</th>
 +                  <th className="py-1.5 pr-4 font-medium">Payload</th>
 +                  <th className="py-1.5 font-medium">Purpose</th>
 +                </tr>
@@ -2904,7 +2904,7 @@ index 00000000..c33f6f12
 +            <table className="w-full text-xs text-left">
 +              <thead className="text-text-muted">
 +                <tr>
-+                  <th className="py-1.5 pr-4 font-medium">Server ??? client</th>
++                  <th className="py-1.5 pr-4 font-medium">Server → client</th>
 +                  <th className="py-1.5 pr-4 font-medium">Payload</th>
 +                  <th className="py-1.5 font-medium">Purpose</th>
 +                </tr>
@@ -2929,7 +2929,7 @@ index 00000000..c33f6f12
 +      </Card>
 +
 +      <Card title="Browser client (JavaScript)" icon="code">
-+        <CodeBlock label="Microphone ??? model ??? speakers" code={BROWSER_SNIPPET} />
++        <CodeBlock label="Microphone → model → speakers" code={BROWSER_SNIPPET} />
 +      </Card>
 +
 +      <Card title="Server client (Node.js)" icon="dns">
@@ -3825,7 +3825,7 @@ index 00000000..58ba76e7
 +            setStatus(msg.state);
 +          }
 +        } else if (msg.type === "ready") {
-+          setStatusDetail(`${msg.model} ?? ${msg.adapter}`);
++          setStatusDetail(`${msg.model} · ${msg.adapter}`);
 +        } else if (msg.type === "text") {
 +          appendTurn(
 +            msg.role === "user" ? "user" : msg.role === "system" ? "system" : "assistant",
@@ -4021,11 +4021,11 @@ index 00000000..58ba76e7
 +                        options={[
 +                          ...configs.map((c) => ({
 +                            value: c.name || c.id,
-+                            label: `[Config] ${c.name || c.id} (${c.model}) ?? ${c.adapter}`,
++                            label: `[Config] ${c.name || c.id} (${c.model}) · ${c.adapter}`,
 +                          })),
 +                          ...combos.map((cb) => ({
 +                            value: cb.name,
-+                            label: `[Combo] ???? ${cb.name} (${cb.models?.length || 0} models)`,
++                            label: `[Combo] 🔀 ${cb.name} (${cb.models?.length || 0} models)`,
 +                          })),
 +                        ]}
 +                        onChange={(e) => setSelectedTarget(e.target.value)}
@@ -4065,7 +4065,7 @@ index 00000000..58ba76e7
 +                          {currentConfig?.settings?.inputSampleRate || sampleRateDefaults(currentConfig?.adapter).input}Hz in / {currentConfig?.settings?.outputSampleRate || sampleRateDefaults(currentConfig?.adapter).output}Hz out
 +                        </span>
 +                        <span className="px-2 py-1 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-500 font-medium">
-+                          ??? Voice + Text Parallel Active
++                          ⚡ Voice + Text Parallel Active
 +                        </span>
 +                      </div>
 +                    </>
@@ -4310,7 +4310,7 @@ index 00000000..58ba76e7
 +                        icon="network_check"
 +                        disabled={testing[currentConfig.id]?.running}
 +                      >
-+                        {testing[currentConfig.id]?.running ? "Testing???" : "Test connection"}
++                        {testing[currentConfig.id]?.running ? "Testing…" : "Test connection"}
 +                      </Button>
 +                    )}
 +                  </div>
@@ -4331,9 +4331,9 @@ index 00000000..58ba76e7
 +                      />
 +                      <div>
 +                        <div className="text-sm font-medium text-text-main capitalize">{status}</div>
-+                        <div className="text-xs text-text-muted truncate max-w-[320px]">{statusDetail || "???"}</div>
++                        <div className="text-xs text-text-muted truncate max-w-[320px]">{statusDetail || "—"}</div>
 +                        {active && inputMuted && (
-+                          <div className="text-[11px] text-amber-500 font-medium">Mic muted ??? AI speaking (interruptions off)</div>
++                          <div className="text-[11px] text-amber-500 font-medium">Mic muted — AI speaking (interruptions off)</div>
 +                        )}
 +                      </div>
 +                    </div>
@@ -4410,7 +4410,7 @@ index 00000000..58ba76e7
 +              <div className="flex flex-col gap-1.5 mt-3 pt-3 border-t border-border-subtle">
 +                <div className="text-[11px] text-text-muted flex items-center justify-between">
 +                  <span>Send text in parallel while talking:</span>
-+                  <span className="text-brand-500 font-mono text-[10px]">Enter ??? to send</span>
++                  <span className="text-brand-500 font-mono text-[10px]">Enter ↵ to send</span>
 +                </div>
 +                <div className="flex gap-2">
 +                  <input
@@ -4464,7 +4464,7 @@ index 00000000..58ba76e7
 +                + Custom WebSocket
 +              </Button>
 +              <Button size="sm" onClick={saveConfigs} disabled={saving} icon="save">
-+                {saving ? "Verifying & Saving???" : "Save All"}
++                {saving ? "Verifying & Saving…" : "Save All"}
 +              </Button>
 +            </div>
 +          </div>
@@ -4485,7 +4485,7 @@ index 00000000..58ba76e7
 +            const dedicatedUrl = `http://127.0.0.1:20128/v1/voice/${config.name || config.id}`;
 +
 +            return (
-+              <Card key={config.id} title={`${config.providerName || "Configuration"} ?? ${config.name || config.id}`} icon="tune">
++              <Card key={config.id} title={`${config.providerName || "Configuration"} · ${config.name || config.id}`} icon="tune">
 +                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 +                  {/* Configuration Name / Slug */}
 +                  <div className="flex flex-col gap-1.5">
@@ -4864,7 +4864,7 @@ index 00000000..58ba76e7
 +                        </span>
 +                        <div className="flex flex-col">
 +                          <span className="font-medium text-text-main">{config.providerName || config.name || "Primary Live API"}</span>
-+                          <span className="text-[11px] text-text-muted font-mono">{config.model} ?? {config.adapter} ?? {config.credentialRef || "no credential"}</span>
++                          <span className="text-[11px] text-text-muted font-mono">{config.model} · {config.adapter} · {config.credentialRef || "no credential"}</span>
 +                        </div>
 +                      </div>
 +                      {config.fallbacks?.length > 0 && (
@@ -5044,9 +5044,9 @@ index 00000000..58ba76e7
 +                <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-border-subtle">
 +                  <div className="flex items-center gap-2 text-xs text-text-muted">
 +                    <span>ID: {config.id}</span>
-+                    <span>??</span>
++                    <span>·</span>
 +                    <span className={config.verified ? "text-green-500 font-medium" : "text-amber-500"}>
-+                      {config.verified ? "??? WebSocket Verified" : "?????? Needs Verification"}
++                      {config.verified ? "✅ WebSocket Verified" : "⚠️ Needs Verification"}
 +                    </span>
 +                  </div>
 +                  <div className="flex gap-2">
@@ -5054,7 +5054,7 @@ index 00000000..58ba76e7
 +                      {defaultId === config.id ? "Default" : "Set Default"}
 +                    </Button>
 +                    <Button variant="ghost" size="sm" onClick={() => testConfig(config)} disabled={testing[config.id]?.running} icon="network_check">
-+                      {testing[config.id]?.running ? "Testing???" : "Test WebSocket"}
++                      {testing[config.id]?.running ? "Testing…" : "Test WebSocket"}
 +                    </Button>
 +                    <Button variant="danger" size="sm" onClick={() => removeConfig(config.id)} icon="delete">
 +                      Remove
@@ -5281,10 +5281,10 @@ index 00000000..7b0d731f
 +  }
 +}
 diff --git a/src/app/api/oauth/[provider]/[action]/route.js b/src/app/api/oauth/[provider]/[action]/route.js
-index e7b82e8f..5de2ea5d 100644
+index 0c4533ef..61256b33 100644
 --- a/src/app/api/oauth/[provider]/[action]/route.js
 +++ b/src/app/api/oauth/[provider]/[action]/route.js
-@@ -268,6 +268,7 @@ export async function GET(request, { params }) {
+@@ -270,6 +270,7 @@ export async function GET(request, { params }) {
          "muse",
          "glm",
          "nous",
@@ -5292,7 +5292,7 @@ index e7b82e8f..5de2ea5d 100644
        ];
        let deviceData;
        if (noPkceDeviceProviders.includes(provider)) {
-@@ -501,7 +502,7 @@ export async function POST(request, { params }) {
+@@ -557,7 +558,7 @@ export async function POST(request, { params }) {
        }
  
        // Providers that don't use PKCE for device code
@@ -5302,7 +5302,7 @@ index e7b82e8f..5de2ea5d 100644
        if (noPkceProviders.includes(provider)) {
          // kimi needs extraData._kimiDeviceId for stable X-Msh-Device-Id (CLIProxyAPI parity)
 diff --git a/src/app/api/providers/[id]/test/testUtils.js b/src/app/api/providers/[id]/test/testUtils.js
-index 6019bac7..9a96a198 100644
+index bbe356fe..c3ca18c3 100644
 --- a/src/app/api/providers/[id]/test/testUtils.js
 +++ b/src/app/api/providers/[id]/test/testUtils.js
 @@ -7,6 +7,7 @@ import { probeBedrockCredentials } from "open-sse/executors/bedrock.js";
@@ -5340,7 +5340,7 @@ index 6019bac7..9a96a198 100644
 +    timeoutMs: 45000,
 +    refreshable: true,
 +  },
-   // Grok CLI / Grok Build ??? probe /v1/user (no inference quota). Headers mirror official CLI.
+   // Grok CLI / Grok Build — probe /v1/user (no inference quota). Headers mirror official CLI.
    "grok-cli": {
      url: PROVIDERS["grok-cli"]?.userUrl || "https://cli-chat-proxy.grok.com/v1/user",
 @@ -284,7 +308,7 @@ async function refreshOAuthToken(connection) {
@@ -6347,7 +6347,7 @@ index 223afe8a..0093655c 100644
 --- a/src/lib/oauth/constants/oauth.js
 +++ b/src/lib/oauth/constants/oauth.js
 @@ -38,6 +38,9 @@ export const QODER_CONFIG = { ...PROVIDER_OAUTH["qoder"] };
- // Qoder CN (qoder.com.cn) ??? same device flow as intl Qoder, CN endpoints.
+ // Qoder CN (qoder.com.cn) — same device flow as intl Qoder, CN endpoints.
  export const QODER_CN_CONFIG = { ...PROVIDER_OAUTH["qoder-cn"] };
  
 +// OmniRush OAuth Configuration (Device Code Flow, rotating refresh tokens)
@@ -6571,7 +6571,7 @@ index 00000000..4e735682
 +try {
 +  sqlite = require('node:sqlite');
 +} catch (_) {
-+  /* older node ??? see resolveGeminiKey fallback */
++  /* older node — see resolveGeminiKey fallback */
 +}
 +
 +const OPERATOR = Symbol('voiceGateway');
@@ -6781,7 +6781,7 @@ index 00000000..4e735682
 +        }
 +        continue;
 +      }
-+      // Unknown/RSV opcode ??? ignore frame.
++      // Unknown/RSV opcode — ignore frame.
 +    }
 +  }
 +
@@ -7149,7 +7149,7 @@ index 00000000..4e735682
 +    teardown();
 +  });
 +  client.on('error', () => {
-+    /* socket error ??? close path handles cleanup */
++    /* socket error — close path handles cleanup */
 +  });
 +}
 +

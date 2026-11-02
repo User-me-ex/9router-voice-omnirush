@@ -1,13 +1,13 @@
 # 9Router — Real-time voice gateway + OmniRush provider
 
 Contribution notes for the 9Router project (`decolua/9router`).
-Base: **v0.5.109** (upstream commit `f39d8f07`), plus three local commits:
+Base: **v0.5.112** (upstream commit `1fe586b`), rebased from v0.5.109.
 
 - `fe85d487` Local: OmniRush provider, voice gateway, overload hook, dataDir/tracing tweaks
 - `b6646a31` deploy: v0.5.109-omni with Docker runtime fixes
 - `7e108782` fix(docker): emit Next standalone output for container builds
 
-Upstream check (done 2026-10-30): current `master` is **0.5.112**. Its tree has no
+Upstream check (done 2026-11-03): latest release is **0.5.112**. Its tree has no
 `live-gateway.js`, `voice-gateway.js`, `src/lib/live/`, `src/app/api/live/`,
 `src/app/api/v1/voice/`, `dashboard/live`, or any `omnirush` provider/registry
 entry. Open issues/PRs mention Gemini Live only for STT (e.g. #4006), not a
@@ -173,7 +173,7 @@ const { device_code, user_code, verification_uri } = await res.json();
 ## 3. How to apply, build, run
 
 ```bash
-# from a clean checkout at v0.5.109 (f39d8f07)
+# from a clean checkout at v0.5.112 (1fe586b)
 git apply --binary 9router-voice-omnirush.patch
 # or unzip 9router-voice-omnirush-source.zip over the tree
 

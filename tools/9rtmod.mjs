@@ -23,7 +23,8 @@ const LOGS = path.join(REPO, "logs");
 const STATE = path.join(WORK, "state.json");
 
 const UPSTREAM = "https://github.com/decolua/9router.git";
-const BASE_TAG = "v0.5.109";
+const BASE_TAG = "v0.5.112";
+const PATCH = path.join(REPO, "patch", "9router-voice-omnirush.patch");
 const DEFAULT_PORT = 20128;
 
 const OVERLAY = [
@@ -98,26 +99,66 @@ function appDir() {
   return hasFullTree() ? REPO : APP_DIR;
 }
 
-function prepare(force = false) {
+function upstreamTags() {
+  const res = spawnSync("git", ["ls-remote", "--tags", "--refs", UPSTREAM, "v*"], { encoding: "utf8" });
+  if (res.status !== 0) return [];
+  return res.stdout
+    .split(/\r?\n/)
+    .map((line) => (line.split("\t")[1] || "").replace("refs/tags/", ""))
+    .filter((tag) => /^v\d+(\.\d+)*$/.test(tag))
+    .sort((a, b) => version(a) - version(b));
+}
+
+function version(tag) {
+  const parts = tag.replace(/^v/, "").split(".").map(Number);
+  return parts[0] * 1e6 + parts[1] * 1e3 + parts[2];
+}
+
+function latestTag() {
+  const tags = upstreamTags();
+  return tags.length ? tags[tags.length - 1] : BASE_TAG;
+}
+
+function overlay(app) {
+  for (const entry of OVERLAY) {
+    const src = path.join(REPO, entry);
+    if (!fs.existsSync(src)) continue;
+    fs.cpSync(src, path.join(app, entry), { recursive: true, force: true });
+  }
+}
+
+function prepare(force = false, tag = BASE_TAG) {
   if (hasFullTree()) return REPO;
 
-  const ready = fs.existsSync(path.join(APP_DIR, "custom-server.js"));
+  const state = readState();
+  const ready =
+    fs.existsSync(path.join(APP_DIR, "custom-server.js")) && (!state.base || state.base === tag);
   if (ready && !force) return APP_DIR;
 
   fs.rmSync(WORK, { recursive: true, force: true });
   fs.mkdirSync(WORK, { recursive: true });
 
-  log(`Fetching upstream 9Router ${BASE_TAG} (one time only)...`);
-  git(["clone", "--depth", "1", "--branch", BASE_TAG, UPSTREAM, APP_DIR]);
+  log(`Fetching upstream 9Router ${tag}...`);
+  git(["clone", "--depth", "1", "--branch", tag, UPSTREAM, APP_DIR]);
 
   log("Applying local changes...");
-  for (const entry of OVERLAY) {
-    const src = path.join(REPO, entry);
-    if (!fs.existsSync(src)) continue;
-    fs.cpSync(src, path.join(APP_DIR, entry), { recursive: true, force: true });
+  if (tag !== BASE_TAG && fs.existsSync(PATCH)) {
+    git(["fetch", "--depth", "1", "origin", "tag", BASE_TAG], { cwd: APP_DIR });
+    const applied = spawnSync("git", ["apply", "--3way", "--binary", PATCH], {
+      cwd: APP_DIR,
+      stdio: "inherit",
+    });
+    if (applied.status !== 0) {
+      log(`\n[9rtmod] ${BASE_TAG} changes do not merge cleanly onto ${tag}.`);
+      log("[9rtmod] Falling back to file overlay; modified files stay at their");
+      log(`[9rtmod] ${BASE_TAG} content while the rest of the tree is ${tag}.\n`);
+      overlay(APP_DIR);
+    }
+  } else {
+    overlay(APP_DIR);
   }
 
-  writeState({ preparedAt: new Date().toISOString(), base: BASE_TAG, preparedCommit: repoCommit() });
+  writeState({ preparedAt: new Date().toISOString(), base: tag, preparedCommit: repoCommit() });
   return APP_DIR;
 }
 
@@ -314,7 +355,7 @@ async function status() {
   const app = appDir();
   const build = fs.existsSync(path.join(app, ".next", "BUILD_ID"));
   log(`repo    : ${REPO}`);
-  log(`mode    : ${hasFullTree() ? "full source tree" : `overlay on upstream ${BASE_TAG}`}`);
+  log(`mode    : ${hasFullTree() ? "full source tree" : `overlay on upstream ${readState().base || BASE_TAG}`}`);
   log(`app     : ${app}`);
   log(`build   : ${build ? "present" : "missing"}`);
   const port = state.port || DEFAULT_PORT;
@@ -329,7 +370,7 @@ function logs() {
 }
 
 function usage() {
-  log(`Usage: 9rtmod [command] [--port <n>] [--rebuild]
+  log(`Usage: 9rtmod [command] [--port <n>] [--to <tag>] [--rebuild]
 
 Commands:
   start      install/build if needed, then run (default)
@@ -338,7 +379,7 @@ Commands:
   status     show build and process state
   logs       print the last server log
   build      rebuild, then restart
-  update     pull this repo and rebuild
+  update     move to the newest upstream release, keep modifications
   doctor     environment check
   help       this text`);
 }
@@ -361,6 +402,8 @@ async function main() {
   const portArg = argv.indexOf("--port");
   const port = portArg !== -1 ? Number(argv[portArg + 1]) : DEFAULT_PORT;
   const force = argv.includes("--rebuild") || argv.includes("--force");
+  const toArg = argv.indexOf("--to");
+  const toTag = toArg !== -1 ? argv[toArg + 1] : "";
 
   if (!Number.isInteger(port) || port <= 0) fail("invalid --port");
 
@@ -369,20 +412,25 @@ async function main() {
   if (command === "status") return status();
   if (command === "logs") return logs();
   if (command === "stop") return stop();
-  if (command === "restart") {
-    stop();
+
+  if (command === "update") {
+    const target = toTag || latestTag();
+    log(`Updating modified build to upstream ${target} (changes are kept)...`);
+    if (!hasFullTree()) spawnSync("git", ["-C", REPO, "pull", "--ff-only"], { stdio: "inherit" });
+    const state = readState();
+    if (alive(state.pid)) stop();
+    const app = prepare(true, target);
+    ensureDeps(app);
+    ensureBuild(app, true);
+    log(`Updated to ${target}; local modifications reapplied.`);
     return start(port);
   }
 
-  const app = prepare(force);
-  if (command === "update") {
-    log("Pulling latest changes...");
-    spawnSync("git", ["-C", REPO, "pull", "--ff-only"], { stdio: "inherit" });
-    prepare(true);
-  }
+  if (command === "restart") stop();
 
+  const app = prepare(force, toTag || BASE_TAG);
   ensureDeps(app);
-  ensureBuild(app, force || command === "build" || command === "update");
+  ensureBuild(app, force || command === "build");
 
   if (command === "build") {
     log("Build complete.");
