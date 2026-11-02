@@ -1,3 +1,14 @@
+diff --git a/.gitignore b/.gitignore
+index 7c9ca338..cad313ae 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -102,3 +102,5 @@ graphify-out/*
+ start-dev-silent.cjs
+ debug.log
+ .scratch/
++
++omni-hook.state.json
+\ No newline at end of file
 diff --git a/Dockerfile b/Dockerfile
 index 24641323..68e04df8 100644
 --- a/Dockerfile
